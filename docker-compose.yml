@@ -1,0 +1,100 @@
+version: "3.3"
+services:
+
+  spark-master:
+    image: michaelmt66/apache-spark:3.2.0
+    container_name: spark-master    
+    ports:
+      - "9090:8080"
+      - "7077:7077"
+    depends_on:
+      - broker      
+    volumes:
+       - ./apps:/opt/spark-apps
+       - ./data:/opt/spark-data
+    environment:
+      - SPARK_LOCAL_IP=spark-master
+      - SPARK_WORKLOAD=master
+      
+      
+  spark-worker-a:
+    image: michaelmt66/apache-spark:3.2.0
+    container_name: spark-worker-a        
+    ports:
+      - "9091:8080"
+      - "7000:7000"
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_DRIVER_MEMORY=1G
+      - SPARK_EXECUTOR_MEMORY=1G
+      - SPARK_WORKLOAD=worker
+      - SPARK_LOCAL_IP=spark-worker-a
+    volumes:
+       - ./apps:/opt/spark-apps
+       - ./data:/opt/spark-data
+            
+       
+  spark-driver:
+    image: michaelmt66/apache-spark:3.2.0
+    container_name: spark-driver        
+    depends_on:
+      - spark-master
+      - spark-worker-a
+    ports:
+      - "9093:8080"
+      - "7001:7000"      
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_DRIVER_MEMORY=1G
+      - SPARK_EXECUTOR_MEMORY=1G
+      - SPARK_WORKLOAD=submit
+      - SPARK_LOCAL_IP=spark-driver
+    volumes:
+        - ./apps:/opt/spark-apps
+        - ./data:/opt/spark-data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.4.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - ./volumes/zookeeper/data:/var/lib/zookeeper/data  
+      - ./volumes/zookeeper/log:/var/lib/zookeeper/log  
+
+  broker:
+    image: confluentinc/cp-kafka:5.4.1
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 100
+
+    volumes:
+      - ./volumes/broker/data:/var/lib/kafka/data
+      
+      
+  producer:
+    image: michaelmt66/python-producer:1.0.0
+    container_name: python-producer
+    depends_on:
+      - broker
+      
